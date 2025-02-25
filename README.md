@@ -15,11 +15,12 @@ This project is a web application for recording Rubik's Cube solving times. User
 
 ## Project Structure
 
-Rootfolder/
- |── public/
- │   └── index.html    # Front-end web application (HTML, CSS, JavaScript)
- |── record.json       # Server-side records file (auto-created if not present)
- |── server.js         # Node.js server code using Express
+myWebSiteNodeJS/
+├── public/
+│   └── index.html    # Front-end web application (HTML, CSS, JavaScript)
+├── record.json       # Server-side records file (auto-created if not present)
+└── server.js         # Node.js server code using Express
+
 
 
 
