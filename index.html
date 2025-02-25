@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rubik's Cube Speed Records</title>
+  <style>
+    /* Basic styling */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f4f8;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    h1, h2 {
+      text-align: center;
+      margin: 20px 0;
+    }
+    /* Input and statistics area */
+    #record-input, #stats {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px auto;
+      max-width: 600px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    #record-input div, #stats div {
+      margin-bottom: 15px;
+    }
+    label {
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    input[type="number"] {
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 100px;
+      margin-right: 10px;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      background-color: #007bff;
+      color: #fff;
+      cursor: pointer;
+      margin: 5px;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #record-message {
+      text-align: center;
+      font-weight: bold;
+      color: green;
+      margin-top: 10px;
+    }
+    /* Two record sections side-by-side */
+    .records-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      max-width: 1000px;
+      margin: 20px auto;
+      justify-content: center;
+    }
+    .record-section {
+      flex: 1;
+      min-width: 300px;
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    /* Highlight class for top 5 fastest records */
+    .highlight {
+      background-color: #fffae6; /* light yellow */
+      color: #333;
+    }
+    .cube-type-btn {
+      padding: 8px 16px;
+      margin: 5px;
+      border: 1px solid #007bff;
+      border-radius: 4px;
+      background-color: #fff;
+      color: #007bff;
+      cursor: pointer;
+      transition: background 0.3s, color 0.3s;
+    }
+    .cube-type-btn.active {
+      background-color: #007bff;
+      color: #fff;
+    }
+    #cubeIcon {
+      font-size: 24px;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    #loadRecordsInput {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rubik's Cube Speed Records</h1>
+
+  <!-- Record Input Area -->
+  <div id="record-input">
+    <div>
+      <label>Cube Type:</label>
+      <div id="cubeTypeButtons"></div>
+      <span id="cubeIcon"></span>
+    </div>
+    <div>
+      <label for="minInput">Minutes:</label>
+      <input type="number" id="minInput" min="0" step="1" placeholder="0">
+      <label for="secInput">Seconds:</label>
+      <input type="number" id="secInput" min="0" max="59.999" step="0.001" placeholder="e.g., 12.345">
+      <button id="submitRecord">Submit Record</button>
+    </div>
+    <div>
+      <button id="clearRecords">Clear All Records</button>
+      <button id="saveRecords">Save Records to Server</button>
+      <button id="loadRecords">Load Records File</button>
+      <input type="file" id="loadRecordsInput" accept=".json">
+    </div>
+  </div>
+
+  <div id="record-message"></div>
+
+  <!-- Statistics -->
+  <div id="stats">
+    <h2>Statistics</h2>
+    <p id="recentAverage">Recent 5 Average: N/A</p>
+    <p id="bestAverage">Best Consecutive 5 Average: N/A</p>
+  </div>
+
+  <!-- Records Container (Side-by-Side) -->
+  <div class="records-container">
+    <div class="record-section" id="solve-records">
+      <h2>Solve Time Records (Best <span id="maxSolveRecords"></span>)</h2>
+      <ul id="recordsSolveDisplay"></ul>
+    </div>
+    <div class="record-section" id="entry-records">
+      <h2>Recent Records (Latest <span id="maxEntryRecords"></span>)</h2>
+      <ul id="recordsEntryDisplay"></ul>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      console.log("DOM fully loaded and parsed");
+
+      // ---------------- Configuration and Initial Data ----------------
+      const CONFIG = {
+        cubeTypes: ["2x2", "3x3", "4x4", "5x5"],
+        maxRecords: 200,
+        maxSolveTime: 600, // total seconds (minutes*60 + seconds)
+        messageTimeout: 3000
+      };
+      const cubeIcons = {
+        "2x2": "[2x2]",
+        "3x3": "[3x3]",
+        "4x4": "[4x4]",
+        "5x5": "[5x5]"
+      };
+
+      let currentCubeType = CONFIG.cubeTypes[0];
+      let solveRecords = CONFIG.cubeTypes.reduce((acc, type) => ({ ...acc, [type]: [] }), {});
+      let entryRecords = CONFIG.cubeTypes.reduce((acc, type) => ({ ...acc, [type]: [] }), {});
+
+      // ---------------- Helper: Format Time ----------------
+      // If total seconds >= 60, display "X min Y sec", else display "Z sec"
+      function formatTime(totalSec) {
+        if (totalSec >= 60) {
+          const mins = Math.floor(totalSec / 60);
+          const secs = (totalSec % 60).toFixed(3);
+          return `${mins} min ${secs} sec`;
+        } else {
+          return `${totalSec.toFixed(3)} sec`;
+        }
+      }
+
+      // ---------------- UI Update Functions ----------------
+      function updateUI() {
+        updateIcon();
+        updateSolveList();
+        updateEntryList();
+        updateStats();
+      }
+      function updateIcon() {
+        document.getElementById("cubeIcon").innerText = cubeIcons[currentCubeType] || "";
+      }
+      function updateSolveList() {
+        const list = document.getElementById("recordsSolveDisplay");
+        let records = solveRecords[currentCubeType] || [];
+        let sorted = records.slice().sort((a, b) => a.time - b.time);
+        list.innerHTML = "";
+        sorted.forEach((rec, index) => {
+          const li = document.createElement("li");
+          li.textContent = `Rank ${index+1} - ${formatTime(rec.time)}`;
+          // Highlight top 5 fastest records
+          if (index < 5) {
+            li.classList.add("highlight");
+          }
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "Delete";
+          delBtn.addEventListener("click", () => { deleteSolveRecord(currentCubeType, rec.date); });
+          li.appendChild(delBtn);
+          list.appendChild(li);
+        });
+      }
+      function updateEntryList() {
+        const list = document.getElementById("recordsEntryDisplay");
+        let records = entryRecords[currentCubeType] || [];
+        let sorted = records.slice().sort((a, b) => b.date - a.date);
+        list.innerHTML = "";
+        sorted.forEach((rec, index) => {
+          const li = document.createElement("li");
+          li.textContent = `Record ${index+1} - ${new Date(rec.date).toLocaleString()} - ${formatTime(rec.time)}`;
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "Delete";
+          delBtn.addEventListener("click", () => { deleteEntryRecord(currentCubeType, rec.date); });
+          li.appendChild(delBtn);
+          list.appendChild(li);
+        });
+      }
+      function updateStats() {
+        let records = solveRecords[currentCubeType] || [];
+        let recent = records.slice().sort((a, b) => b.date - a.date).slice(0, 5);
+        let sumRecent = recent.reduce((sum, rec) => sum + rec.time, 0);
+        let avgRecent = recent.length >= 5 ? (sumRecent / 5).toFixed(3) : "N/A";
+        document.getElementById("recentAverage").innerText = `Recent 5 Average: ${avgRecent} sec`;
+        let bestAvg = "N/A";
+        if (records.length >= 5) {
+          let chrono = records.slice().sort((a, b) => a.date - b.date);
+          for (let i = 0; i <= chrono.length - 5; i++){
+            let group = chrono.slice(i, i+5);
+            let avg = group.reduce((sum, rec) => sum + rec.time, 0) / 5;
+            if (bestAvg === "N/A" || avg < bestAvg) bestAvg = avg.toFixed(3);
+          }
+        }
+        document.getElementById("bestAverage").innerText = `Best Consecutive 5 Average: ${bestAvg} sec`;
+      }
+      function deleteSolveRecord(cubeType, recordDate) {
+        solveRecords[cubeType] = solveRecords[cubeType].filter(rec => rec.date !== recordDate);
+        updateSolveList();
+        updateStats();
+      }
+      function deleteEntryRecord(cubeType, recordDate) {
+        entryRecords[cubeType] = entryRecords[cubeType].filter(rec => rec.date !== recordDate);
+        updateEntryList();
+      }
+      function initCubeTypeButtons() {
+        const container = document.getElementById("cubeTypeButtons");
+        CONFIG.cubeTypes.forEach(type => {
+          const btn = document.createElement("button");
+          btn.className = "cube-type-btn";
+          btn.textContent = type;
+          btn.dataset.type = type;
+          btn.addEventListener("click", () => {
+            currentCubeType = type;
+            document.querySelectorAll(".cube-type-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            updateUI();
+          });
+          if (type === currentCubeType) btn.classList.add("active");
+          container.appendChild(btn);
+        });
+        let maxSolveElem = document.getElementById("maxSolveRecords");
+        let maxEntryElem = document.getElementById("maxEntryRecords");
+        if (maxSolveElem) { maxSolveElem.textContent = CONFIG.maxRecords; }
+        if (maxEntryElem) { maxEntryElem.textContent = CONFIG.maxRecords; }
+      }
+
+      // ---------------- Server Interaction ----------------
+      function autoLoadRecords() {
+        fetch("/record.json", { cache: "no-cache" })
+          .then(response => response.json())
+          .then(data => {
+            console.log("Loaded data from server:", data);
+            solveRecords = data.solveRecords || solveRecords;
+            entryRecords = data.entryRecords || entryRecords;
+            updateUI();
+            console.log("Auto-loaded records successfully");
+          })
+          .catch(error => {
+            console.warn("Failed to auto-load record.json from server", error);
+          });
+      }
+      function saveRecordsToServer() {
+        const data = { solveRecords, entryRecords };
+        fetch("/record.json", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        })
+        .then(response => response.text())
+        .then(text => {
+          console.log("Records saved successfully:", text);
+        })
+        .catch(error => {
+          console.error("Failed to save records:", error);
+        });
+      }
+      setInterval(() => {
+        console.log("Auto-save triggered at " + new Date().toISOString());
+        saveRecordsToServer();
+      }, 10000);
+
+      // ---------------- Event Handlers ----------------
+      document.getElementById("submitRecord").addEventListener("click", () => {
+        const minInput = document.getElementById("minInput").value;
+        const secInput = document.getElementById("secInput").value;
+        const minutes = parseInt(minInput) || 0;
+        const seconds = parseFloat(secInput) || 0;
+        if (seconds >= 60) {
+          alert("Seconds must be less than 60!");
+          return;
+        }
+        const totalTime = minutes * 60 + seconds;
+        if (isNaN(totalTime) || totalTime <= 0 || totalTime > CONFIG.maxSolveTime) {
+          alert(`Please enter a valid total solve time between 0 and ${CONFIG.maxSolveTime} seconds!`);
+          return;
+        }
+        const newRecord = { time: totalTime, date: Date.now() };
+        solveRecords[currentCubeType].push(newRecord);
+        solveRecords[currentCubeType].sort((a, b) => a.time - b.time);
+        if (solveRecords[currentCubeType].length > CONFIG.maxRecords) {
+          solveRecords[currentCubeType].pop();
+        }
+        entryRecords[currentCubeType].push(newRecord);
+        entryRecords[currentCubeType].sort((a, b) => b.date - a.date);
+        if (entryRecords[currentCubeType].length > CONFIG.maxRecords) {
+          entryRecords[currentCubeType].pop();
+        }
+        document.getElementById("record-message").innerText = `New record: ${formatTime(totalTime)}`;
+        setTimeout(() => { document.getElementById("record-message").innerText = ""; }, CONFIG.messageTimeout);
+        document.getElementById("minInput").value = "";
+        document.getElementById("secInput").value = "";
+        updateUI();
+      });
+      document.getElementById("clearRecords").addEventListener("click", () => {
+        if (confirm("Are you sure you want to clear all records?")) {
+          solveRecords = CONFIG.cubeTypes.reduce((acc, type) => ({ ...acc, [type]: [] }), {});
+          entryRecords = CONFIG.cubeTypes.reduce((acc, type) => ({ ...acc, [type]: [] }), {});
+          updateUI();
+        }
+      });
+      document.getElementById("saveRecords").addEventListener("click", saveRecordsToServer);
+      document.getElementById("loadRecords").addEventListener("click", () => {
+        document.getElementById("loadRecordsInput").click();
+      });
+      document.getElementById("loadRecordsInput").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            try {
+              const data = JSON.parse(event.target.result);
+              solveRecords = data.solveRecords || solveRecords;
+              entryRecords = data.entryRecords || entryRecords;
+              updateUI();
+              alert("Records loaded successfully!");
+            } catch (err) {
+              alert("Failed to load records: invalid file format");
+            }
+          };
+          reader.readAsText(file);
+        }
+      });
+
+      // ---------------- Initialization ----------------
+      initCubeTypeButtons();
+      updateUI();
+      autoLoadRecords();
+    });
+  </script>
+</body>
+</html>
